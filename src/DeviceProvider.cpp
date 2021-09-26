@@ -6,34 +6,17 @@
 
 #include "Communication/BTSerialCommunicationManager.h"
 #include "Communication/SerialCommunicationManager.h"
+#include "Communication/NamedPipeCommunicationManager.h"
+
 #include "DeviceDriver/KnuckleDriver.h"
 #include "DeviceDriver/LucidGloveDriver.h"
-#include "DriverLog.h"
+
 #include "Encode/AlphaEncodingManager.h"
 #include "Encode/LegacyEncodingManager.h"
+
 #include "Quaternion.h"
 #include "Util/Windows.h"
-
-static bool CreateBackgroundProcess() {
-  STARTUPINFOA si;
-  PROCESS_INFORMATION pi;
-  ZeroMemory(&si, sizeof(si));
-  si.cb = sizeof(si);
-  ZeroMemory(&pi, sizeof(pi));
-
-  const std::string driverPath = GetDriverPath();
-  DriverLog("Path to DLL: %s", driverPath.c_str());
-
-  std::string path = driverPath + "\\openglove_overlay.exe";
-
-  bool success = true;
-  if (!CreateProcess(path.c_str(), NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) success = false;
-
-  CloseHandle(pi.hProcess);
-  CloseHandle(pi.hThread);
-
-  return success;
-}
+#include "DriverLog.h"
 
 vr::EVRInitError DeviceProvider::Init(vr::IVRDriverContext* pDriverContext) {
   vr::EVRInitError initError = InitServerDriverContext(pDriverContext);
@@ -43,18 +26,16 @@ vr::EVRInitError DeviceProvider::Init(vr::IVRDriverContext* pDriverContext) {
   InitDriverLog(vr::VRDriverLog());
   DebugDriverLog("OpenGlove is running in DEBUG mode");
 
-  if (!CreateBackgroundProcess()) {
+  std::string driverPath = GetDriverPath();
+  DriverLog("Driver path: %s", driverPath.c_str());
+
+  if (!CreateBackgroundProcess(driverPath + "\\bin\\win64\\openglove_overlay.exe")) {
     DriverLog("Could not create background process");
     return vr::VRInitError_Init_FileNotFound;
   }
 
-  VRDeviceConfiguration_t leftConfiguration = GetDeviceConfiguration(vr::TrackedControllerRole_LeftHand);
-  VRDeviceConfiguration_t rightConfiguration = GetDeviceConfiguration(vr::TrackedControllerRole_RightHand);
-
-  std::string driverPath = GetDriverPath();
-
-  const std::string unwanted = "\\bin\\win64";
-  driverPath.erase(driverPath.find(unwanted), unwanted.length());
+  VRDeviceConfiguration leftConfiguration = GetDeviceConfiguration(vr::TrackedControllerRole_LeftHand);
+  VRDeviceConfiguration rightConfiguration = GetDeviceConfiguration(vr::TrackedControllerRole_RightHand);
 
   std::shared_ptr<BoneAnimator> boneAnimator = std::make_shared<BoneAnimator>(driverPath + "\\resources\\anims\\glove_anim.glb");
 
@@ -70,7 +51,7 @@ vr::EVRInitError DeviceProvider::Init(vr::IVRDriverContext* pDriverContext) {
   return vr::VRInitError_None;
 }
 
-std::unique_ptr<DeviceDriver> DeviceProvider::InstantiateDeviceDriver(VRDeviceConfiguration_t configuration, std::shared_ptr<BoneAnimator> boneAnimator) {
+std::unique_ptr<DeviceDriver> DeviceProvider::InstantiateDeviceDriver(VRDeviceConfiguration configuration, std::shared_ptr<BoneAnimator> boneAnimator) {
   std::unique_ptr<CommunicationManager> communicationManager;
   std::unique_ptr<EncodingManager> encodingManager;
 
@@ -91,11 +72,18 @@ std::unique_ptr<DeviceDriver> DeviceProvider::InstantiateDeviceDriver(VRDeviceCo
   }
 
   switch (configuration.communicationProtocol) {
-    case VRCommunicationProtocol::BTSERIAL: {
+    case VRCommunicationProtocol::NAMED_PIPE: {
+      DriverLog("Communication set to Named Pipe");
+      std::string path = "\\\\.\\pipe\\vrapplication\\input" + isRightHand ? "right" : "left";
+      VRNamedPipeInputConfiguration namedPipeConfiguration(path);
+      communicationManager = std::make_unique<NamedPipeCommunicationManager>(namedPipeConfiguration);
+      break;
+    }
+    case VRCommunicationProtocol::BT_SERIAL: {
       DriverLog("Communication set to BTSerial");
       char name[248];
       vr::VRSettings()->GetString(c_btserialCommunicationSettingsSection, isRightHand ? "right_name" : "left_name", name, sizeof(name));
-      VRBTSerialConfiguration_t btSerialSettings(name);
+      VRBTSerialConfiguration btSerialSettings(name);
       communicationManager = std::make_unique<BTSerialCommunicationManager>(std::move(encodingManager), btSerialSettings);
       break;
     }
@@ -105,7 +93,7 @@ std::unique_ptr<DeviceDriver> DeviceProvider::InstantiateDeviceDriver(VRDeviceCo
       char port[16];
       vr::VRSettings()->GetString(c_serialCommunicationSettingsSection, isRightHand ? "right_port" : "left_port", port, sizeof(port));
       const int baudRate = vr::VRSettings()->GetInt32(c_serialCommunicationSettingsSection, "baud_rate");
-      VRSerialConfiguration_t serialSettings(port, baudRate);
+      VRSerialConfiguration serialSettings(port, baudRate);
 
       communicationManager = std::make_unique<SerialCommunicationManager>(std::move(encodingManager), serialSettings);
       break;
@@ -129,7 +117,7 @@ std::unique_ptr<DeviceDriver> DeviceProvider::InstantiateDeviceDriver(VRDeviceCo
     }
   }
 }
-VRDeviceConfiguration_t DeviceProvider::GetDeviceConfiguration(vr::ETrackedControllerRole role) {
+VRDeviceConfiguration DeviceProvider::GetDeviceConfiguration(vr::ETrackedControllerRole role) {
   const bool isRightHand = role == vr::TrackedControllerRole_RightHand;
 
   const bool isEnabled = vr::VRSettings()->GetBool(c_driverSettingsSection, isRightHand ? "right_enabled" : "left_enabled");
@@ -158,8 +146,8 @@ VRDeviceConfiguration_t DeviceProvider::GetDeviceConfiguration(vr::ETrackedContr
   // Convert the rotation to a quaternion
   const vr::HmdQuaternion_t angleOffsetQuaternion = EulerToQuaternion(DegToRad(offsetXRot), DegToRad(offsetYRot), DegToRad(offsetZRot));
 
-  return VRDeviceConfiguration_t(
-      role, isEnabled, VRPoseConfiguration_t(offsetVector, angleOffsetQuaternion, poseTimeOffset, controllerOverrideEnabled, controllerIdOverride, calibrationButton),
+  return VRDeviceConfiguration(
+      role, isEnabled, VRPoseConfiguration(offsetVector, angleOffsetQuaternion, poseTimeOffset, controllerOverrideEnabled, controllerIdOverride, calibrationButton),
       encodingProtocol, communicationProtocol, deviceDriver);
 }
 
