@@ -45,8 +45,8 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           cmakeListsTxtPath: '${{ github.workspace }}/CMakeLists.txt'
-          configurePreset: 'ninja-multi-vcpkg'
-          buildPreset: 'ninja-multi-vcpkg'
+          configurePreset: 'ci-default'
+          buildPreset: 'ci-build'
 
       - name: Upload package
         uses: actions/upload-artifact@v2
