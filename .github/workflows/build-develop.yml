@@ -52,4 +52,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: opengloves.zip
-          path: ${{ github.workspace }}/opengloves${{ matrix.os[1] }}.zip
+          path: ${{ github.workspace }}
