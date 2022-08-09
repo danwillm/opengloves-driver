@@ -21,11 +21,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: lukka/get-cmake@latest
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v10
-        with:
-          vcpkgGitCommitId: 'a0454d6e18b335cf12da34d925538897d598219b'
-
       - name: Checkout submodules
         run: |
           git submodule update --init
@@ -34,12 +29,11 @@ jobs:
         run: find $RUNNER_WORKSPACE
         shell: bash
 
-      - name: Restore artifacts, or run vcpkg, build (and cache artifacts as post step)
+      - name: Restore artifacts, or run vcpkg
         uses: lukka/run-vcpkg@v10
         id: runvcpkg
         with:
-          vcpkgDirectory: '${{ runner.workspace }}/b/vcpkg'
-          vcpkgGitCommitId: '${{ matrix.vcpkgCommitId }}'
+          vcpkgGitCommitId: 'a0454d6e18b335cf12da34d925538897d598219b'
           # Run vcpkg with the command specified by the `runVcpkgFormatString` input.
           runVcpkgInstall: true
           vcpkgJsonGlob: '**/vcpkg.json'
