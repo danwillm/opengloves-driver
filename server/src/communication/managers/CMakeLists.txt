@@ -1,0 +1,4 @@
+add_library(communication_managers STATIC communication_manager.h queryable_communication_manager.cpp)
+
+target_link_libraries(communication_managers PUBLIC communication-includes)
+target_link_libraries(communication_managers PRIVATE communication_services encoding_services)
