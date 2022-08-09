@@ -30,7 +30,6 @@ jobs:
         run: |
           git submodule update --init
 
-      - uses: lukka/get-cmake@v3.23.2
       - name: List $RUNNER_WORKSPACE before build
         run: find $RUNNER_WORKSPACE
         shell: bash
