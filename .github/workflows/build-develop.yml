@@ -52,4 +52,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: opengloves.zip
-          path: ${{ github.workspace }}/builds/ci-build/driver
+          path: ${{ github.workspace }}/builds/ci-default/driver
